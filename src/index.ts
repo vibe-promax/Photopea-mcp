@@ -1,5 +1,5 @@
 import { TOOLS, getTool } from "./tools.js";
-import { buildFitToLayer, escapeString } from "./bridge/script-builder.js";
+import { buildFitToLayer, buildSelectLayer, escapeString } from "./bridge/script-builder.js";
 
 export interface Env {
   PHOTOPEA_BRIDGE: DurableObjectNamespace;
@@ -204,4 +204,46 @@ async function fetchPublicFile(source: string): Promise<{ filename: string; data
   let filename = url.pathname.split("/").pop() || "photopea-file";
   try { filename = decodeURIComponent(filename); } catch { /* retain the encoded filename */ }
   return { filename, data: btoa(binary) };
+}
+async function bridgeCall(env: Env, path: string, body: unknown): Promise<any> {
+  const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
+  const response = await stub.fetch("https://bridge.internal" + path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+  });
+  const payload = await response.json() as { ok: boolean; result?: any; error?: string };
+  if (!response.ok || !payload.ok || payload.result?.error) throw new Error(payload.error || payload.result?.error || "Photopea bridge request failed.");
+  return payload.result || {};
+}
+async function placeRemoteImage(env: Env, args: Record<string, unknown>, fill: boolean): Promise<string> {
+  const source = String(args.source || "");
+  const file = await fetchPublicFile(source);
+  const docResult = await bridgeCall(env, "/execute", { script: "app.echoToOE(app.activeDocument ? app.activeDocument.name : '');" });
+  const docName = String(docResult.data || "");
+  if (!docName) throw new Error("Open or create a target document before placing an image.");
+  if (fill) {
+    await bridgeCall(env, "/execute", { script: buildSelectLayer({ target: String(args.placeholder || "") }) });
+  }
+  await bridgeCall(env, "/load", file);
+  const lines = [
+    "var _targetDoc=app.documents.getByName('" + escapeString(docName) + "');",
+    "var _sourceDoc=app.activeDocument;",
+    "_sourceDoc.selection.selectAll();",
+    "_sourceDoc.selection.copy(true);",
+    "_sourceDoc.close(2);",
+    "app.activeDocument=_targetDoc;",
+    "app.activeDocument.paste();"
+  ];
+  if (args.name) lines.push("app.activeDocument.activeLayer.name='" + escapeString(String(args.name)) + "';");
+  if (args.width || args.height) {
+    lines.push("function _pv(v){return typeof v==='object'&&v!==null?(v.value||v.L||0):v;}");
+    lines.push("var _b=app.activeDocument.activeLayer.bounds;var _w=_pv(_b[2])-_pv(_b[0]);var _h=_pv(_b[3])-_pv(_b[1]);");
+    if (args.width && args.height) lines.push("var _s=Math.min(" + Number(args.width) + "/_w," + Number(args.height) + "/_h);");
+    else if (args.width) lines.push("var _s=" + Number(args.width) + "/_w;");
+    else lines.push("var _s=" + Number(args.height) + "/_h;");
+    lines.push("if(_w>0&&_h>0)app.activeDocument.activeLayer.resize(_s*100,_s*100);");
+  }
+  if (args.x !== undefined || args.y !== undefined) lines.push("app.activeDocument.activeLayer.translate(" + Number(args.x || 0) + "," + Number(args.y || 0) + ");");
+  if (fill) lines.push(buildFitToLayer({ placeholder: String(args.placeholder), fit: args.fit === "contain" ? "contain" : "cover", mask: args.mask !== false } as any));
+  const done = await bridgeCall(env, "/execute", { script: lines.join("\n") });
+  return done.data || "Image placed in the document.";
 }
