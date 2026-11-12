@@ -84,7 +84,8 @@ export class PhotopeaBridge {
       return new Response(null, { status: 101, webSocket: client });
     }
     if (url.pathname === "/execute" && request.method === "POST") {
-      if (!this.socket || !this.ready || this.socket.readyState !== WebSocket.OPEN) return json({ ok: false, error: "Photopea browser is not connected. Open the /editor page and keep it active." }, 503);
+      const activeSocket = this.socket || this.state.getWebSockets()[0];
+      if (!activeSocket || !this.ready || activeSocket.readyState !== WebSocket.OPEN) return json({ ok: false, error: "Photopea browser is not connected. Open the /editor page and keep it active." }, 503);
       const body = await request.json() as { tool: string; args: Record<string, unknown> };
       if (body.tool === "photopea_status") return json({ ok: true, result: { connected: true, ready: this.ready } });
       let script = "";
@@ -104,7 +105,7 @@ export class PhotopeaBridge {
       const result = await new Promise<unknown>((resolve, reject) => {
         const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("Photopea script timed out after 30 seconds")); }, 30000);
         this.pending.set(id, { resolve, reject, timer });
-        try { this.socket!.send(JSON.stringify({ type: "EXECUTE", id, script })); }
+        try { activeSocket.send(JSON.stringify({ type: "EXECUTE", id, script })); }
         catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e instanceof Error ? e : new Error("WebSocket send failed")); }
       }).catch(e => ({ __error: e instanceof Error ? e.message : "Execution failed" }));
       if (result && typeof result === "object" && "__error" in result) return json({ ok: false, error: (result as {__error:string}).__error }, 504);
