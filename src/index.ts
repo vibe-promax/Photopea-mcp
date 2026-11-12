@@ -218,7 +218,10 @@ async function fetchPublicFile(source: string): Promise<{ filename: string; byte
   try { url = new URL(source); } catch { throw new Error("Provide a valid public HTTPS file URL. Local file paths are not supported."); }
   const safe = (u: URL) => {
     const h = u.hostname.toLowerCase();
-    return u.protocol === "https:" && !u.username && !u.password && !h.startsWith("[") && h !== "localhost" && !h.endsWith(".local") && h !== "127.0.0.1" && !h.startsWith("10.") && !h.startsWith("192.168.") && !h.startsWith("169.254.");
+    const parts = h.split(".");
+    const ip = parts.length === 4 && parts.every(v => /^\\d+$/.test(v) && Number(v) >= 0 && Number(v) <= 255) ? parts.map(Number) : null;
+    const privateIp = !!ip && (ip[0] === 0 || ip[0] === 10 || ip[0] === 127 || (ip[0] === 169 && ip[1] === 254) || (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31) || (ip[0] === 192 && ip[1] === 168) || ip[0] >= 224);
+    return u.protocol === "https:" && (u.port === "" || u.port === "443") && !u.username && !u.password && !h.startsWith("[") && h !== "localhost" && !h.endsWith(".local") && !h.endsWith(".internal") && !privateIp;
   };
   if (!safe(url)) throw new Error("Only public HTTPS URLs are accepted; local and private network addresses are blocked.");
   let response: Response | null = null;
