@@ -85,7 +85,8 @@ export class PhotopeaBridge {
     }
     if (url.pathname === "/execute" && request.method === "POST") {
       const activeSocket = this.socket || this.state.getWebSockets()[0];
-      if (!activeSocket || !this.ready || activeSocket.readyState !== WebSocket.OPEN) return json({ ok: false, error: "Photopea browser is not connected. Open the /editor page and keep it active." }, 503);
+      if (!activeSocket || activeSocket.readyState !== WebSocket.OPEN) return json({ ok: false, error: "Photopea browser is not connected. Open the /editor page and keep it active." }, 503);
+      this.ready = true;
       const body = await request.json() as { tool: string; args: Record<string, unknown> };
       if (body.tool === "photopea_status") return json({ ok: true, result: { connected: true, ready: this.ready } });
       let script = "";
