@@ -96,7 +96,7 @@ export default {
             if (!exported.fileBase64) throw new Error("Photopea did not return an exported file for " + file.filename);
             total += Number(exported.size || 0);
             if (total > 20 * 1024 * 1024) throw new Error("Batch export exceeded the 20 MB combined response limit.");
-            const base = file.filename.replace(/\\.[^.]+$/, "") || "image";
+            const base = file.filename.replace(/\.[^.]+$/, "") || "image";
             outputs.push({ filename: base + "." + format, size: Number(exported.size || 0), base64: exported.fileBase64 });
             await bridgeCall(env, "/execute", { script: "app.activeDocument.close(2); app.echoToOE('closed');" });
           }
