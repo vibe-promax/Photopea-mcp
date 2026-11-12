@@ -113,6 +113,21 @@ export class PhotopeaBridge {
     }
     const active = this.socket || this.state.getWebSockets()[0];
     if (url.pathname === "/status") return json({ connected: !!active && active.readyState === WebSocket.OPEN, ready: !!(await this.state.storage.get<boolean>("ready")) });
+    if (url.pathname === "/load" && request.method === "POST") {
+      const active = this.socket || this.state.getWebSockets()[0];
+      if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not connected and ready." }, 503);
+      const body = await request.json() as { data: string; filename: string };
+      if (typeof body.data !== "string" || body.data.length > 36000000 || typeof body.filename !== "string") return json({ ok: false, error: "File exceeds the 27 MB transfer limit or has an invalid payload." }, 413);
+      const id = crypto.randomUUID();
+      const outcome = await new Promise<any>((resolve, reject) => {
+        const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("Photopea file load timed out.")); }, 60000);
+        this.pending.set(id, { resolve, reject, timer });
+        try { active.send(JSON.stringify({ type: "load", id, data: body.data, filename: body.filename })); }
+        catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e instanceof Error ? e : new Error("Could not send file to Photopea.")); }
+      }).catch(e => ({ error: e instanceof Error ? e.message : "File load failed." }));
+      if (outcome?.error) return json({ ok: false, error: outcome.error }, 504);
+      return json({ ok: true, result: outcome });
+    }
     if (url.pathname === "/execute" && request.method === "POST") {
       if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not ready. Open /editor?token=… and wait for the bridge to show Ready." }, 503);
       const body = await request.json() as { script: string; expectFiles?: boolean; previewMaxSize?: number };
