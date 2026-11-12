@@ -2,7 +2,7 @@
 
 A Cloudflare Workers adaptation of the MIT-licensed [attalla1/photopea-mcp-server](https://github.com/attalla1/photopea-mcp-server). It exposes an MCP Streamable HTTP endpoint and connects it to the official Photopea editor running in a browser tab.
 
-**Current state: experimental port.** The upstream script builders and 42 tool definitions are included. This is not yet a feature-for-feature port of all 46 upstream tools: local filesystem workflows, batch export to local folders, and the upstream file-placement pipeline still need a browser/R2-backed implementation.
+**Current state: experimental port.** The upstream script builders and all 46 editing tool names are represented. Cloudflare-specific adaptations replace local filesystem paths with public HTTPS file URLs and return exported files as base64; behavior still needs end-to-end validation against the live Photopea editor.
 
 ## Architecture
 
@@ -22,9 +22,9 @@ A Cloudflare Workers adaptation of the MIT-licensed [attalla1/photopea-mcp-serve
 
 **Image operations:** apply adjustment, apply filter, transform layer, add gradient, make/modify/fill/clear selection.
 
-**Output and utilities:** get preview (image result), export image (base64 result), run script, undo, redo, load font, list fonts.
+**Output and utilities:** open file from public HTTPS URL, place image, fill placeholder, get preview (image result), export image (base64 result), batch process (up to five URLs, base64 output), run script, undo, redo, load font, list fonts.
 
-The API exposes 42 editing tools plus `photopea_status`. Tool schemas are published by `tools/list`.
+The API exposes 46 editing tools plus `photopea_status`. Tool schemas are published by `tools/list`.
 
 ## Deployment
 
@@ -56,7 +56,7 @@ Open the editor URL and wait for the bridge to show **Ready**. Keep that tab ope
 
 - The browser editor must remain open. Android may suspend background tabs; keep Photopea in the foreground during long operations.
 - Preview returns image content. Export currently returns base64 file data in a text result; large PSD exports can exceed practical MCP response sizes.
-- Local file paths are not available in Cloudflare Workers. The upstream `open_file`, `place_image`, `fill_placeholder`, and `batch_process` tools are not included in this port yet.
+- Local filesystem paths are not available in Cloudflare Workers. File-open, image-placement, placeholder-fill, and batch tools accept public HTTPS URLs only. Batch processing is limited to five inputs and a 20 MB combined export response.
 - Not every Photopea feature is scriptable. Custom scripts have broad access to the open document and can make destructive changes.
 - The browser bridge is single-editor/single-session in this initial version. Multiple independent users need separate session routing before public multi-user use.
 - This has not yet passed a live Cloudflare deployment and end-to-end Photopea test. Do not treat the current commit as production-ready.
