@@ -69,10 +69,20 @@ export default {
         const response = await stub.fetch("https://bridge.internal/status");
         return result(rpc.id, { content: [{ type: "text", text: await response.text() }] });
       }
-      const tool = getTool(p.name || "");
-      if (!tool) return error(rpc.id, -32602, "Unknown tool");
       try {
-        const built = tool.build(p.arguments || {});
+        const args = p.arguments || {};
+        if (p.name === "photopea_open_file") {
+          const file = await fetchPublicFile(String(args.source || ""));
+          await bridgeCall(env, "/load", file);
+          return result(rpc.id, { content: [{ type: "text", text: "File opened in Photopea: " + file.filename }] });
+        }
+        if (p.name === "photopea_place_image" || p.name === "photopea_fill_placeholder") {
+          const message = await placeRemoteImage(env, args, p.name === "photopea_fill_placeholder");
+          return result(rpc.id, { content: [{ type: "text", text: message }] });
+        }
+        const tool = getTool(p.name || "");
+        if (!tool) return error(rpc.id, -32602, "Unknown tool");
+        const built = tool.build(args);
         if (!built.script || built.script.length > 200000) return error(rpc.id, -32602, "Generated script is empty or exceeds 200,000 characters");
         const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
         const response = await stub.fetch("https://bridge.internal/execute", {
