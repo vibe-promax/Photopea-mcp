@@ -176,3 +176,32 @@ export class PhotopeaBridge {
   }
   webSocketError(socket: WebSocket) { return this.webSocketClose(socket); }
 }
+
+async function fetchPublicFile(source: string): Promise<{ filename: string; data: string }> {
+  let url: URL;
+  try { url = new URL(source); } catch { throw new Error("Provide a valid public HTTPS file URL. Local file paths are not supported."); }
+  const safe = (u: URL) => {
+    const h = u.hostname.toLowerCase();
+    return u.protocol === "https:" && !u.username && !u.password && !h.startsWith("[") && h !== "localhost" && !h.endsWith(".local") && h !== "127.0.0.1" && !h.startsWith("10.") && !h.startsWith("192.168.") && !h.startsWith("169.254.");
+  };
+  if (!safe(url)) throw new Error("Only public HTTPS URLs are accepted; local and private network addresses are blocked.");
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    response = await fetch(url.toString(), { redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    const location = response.headers.get("location");
+    if (!location) throw new Error("The file host returned an invalid redirect.");
+    url = new URL(location, url);
+    if (!safe(url)) throw new Error("Redirect to a private or non-HTTPS URL was blocked.");
+  }
+  if (!response || !response.ok) throw new Error("Could not download file (HTTP " + (response?.status || "unknown") + ").");
+  const declared = Number(response.headers.get("content-length") || 0);
+  if (declared > 25 * 1024 * 1024) throw new Error("The file exceeds the 25 MB transfer limit.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > 25 * 1024 * 1024) throw new Error("The file exceeds the 25 MB transfer limit.");
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  let filename = url.pathname.split("/").pop() || "photopea-file";
+  try { filename = decodeURIComponent(filename); } catch { /* retain the encoded filename */ }
+  return { filename, data: btoa(binary) };
+}
