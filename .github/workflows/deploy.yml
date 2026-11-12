@@ -16,6 +16,10 @@ jobs:
           cache: npm
       - run: npm install
       - run: npm run typecheck
+      - name: Upload MCP authentication secret
+        env:
+          MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
+        run: printf "%s" "$MCP_AUTH_TOKEN" | npx wrangler secret put MCP_AUTH_TOKEN
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
