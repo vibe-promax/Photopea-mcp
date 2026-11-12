@@ -81,6 +81,29 @@ export default {
           const message = await placeRemoteImage(env, args, p.name === "photopea_fill_placeholder");
           return result(rpc.id, { content: [{ type: "text", text: message }] });
         }
+        if (p.name === "photopea_batch_process") {
+          const inputs = Array.isArray(args.inputs) ? args.inputs.slice(0, 5).map(String) : [];
+          if (!inputs.length) throw new Error("Provide at least one image URL.");
+          const format = String(args.format || "png");
+          if (!["png", "jpg", "webp", "psd"].includes(format)) throw new Error("Unsupported batch export format.");
+          const outputs: Array<{ filename: string; size: number; base64: string }> = [];
+          let total = 0;
+          for (const source of inputs) {
+            const file = await fetchPublicFile(source);
+            await bridgeCall(env, "/load", file);
+            if (args.script) await bridgeCall(env, "/execute", { script: String(args.script) });
+            const quality = Number(args.quality || 90);
+            const fmt = (format === "jpg" || format === "webp") ? format + ":" + (quality / 100) : format;
+            const exported = await bridgeCall(env, "/execute", { script: "app.activeDocument.saveToOE('" + fmt + "');", expectFiles: true });
+            if (!exported.fileBase64) throw new Error("Photopea did not return an exported file for " + file.filename);
+            total += Number(exported.size || 0);
+            if (total > 20 * 1024 * 1024) throw new Error("Batch export exceeded the 20 MB combined response limit.");
+            const base = file.filename.replace(/\\.[^.]+$/, "") || "image";
+            outputs.push({ filename: base + "." + format, size: Number(exported.size || 0), base64: exported.fileBase64 });
+            await bridgeCall(env, "/execute", { script: "app.activeDocument.close(2); app.echoToOE('closed');" });
+          }
+          return result(rpc.id, { content: [{ type: "text", text: JSON.stringify({ files: outputs }) }] });
+        }
         const tool = getTool(p.name || "");
         if (!tool) return error(rpc.id, -32602, "Unknown tool");
         const built = tool.build(args);
