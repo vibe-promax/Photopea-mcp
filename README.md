@@ -1,51 +1,70 @@
-# Photopea MCP on Cloudflare
+# Photopea MCP — Cloudflare edition
 
-Cloudflare Worker + Durable Object browser bridge for controlling Photopea through an MCP-compatible Streamable HTTP endpoint.
+A Cloudflare Workers adaptation of the MIT-licensed [attalla1/photopea-mcp-server](https://github.com/attalla1/photopea-mcp-server). It exposes an MCP Streamable HTTP endpoint and connects it to the official Photopea editor running in a browser tab.
 
-> **Status: early scaffold / experimental.** This repository is a Cloudflare adaptation project based on the MIT-licensed [attalla1/photopea-mcp-server](https://github.com/attalla1/photopea-mcp-server). It is not yet a complete port of the upstream toolset. The initial implementation exposes a small set of tools to validate the remote browser architecture.
+**Current state: experimental port.** The upstream script builders and 42 tool definitions are included. This is not yet a feature-for-feature port of all 46 upstream tools: local filesystem workflows, batch export to local folders, and the upstream file-placement pipeline still need a browser/R2-backed implementation.
 
 ## Architecture
 
-- MCP client sends JSON-RPC requests to `/mcp` with a Bearer token.
-- Cloudflare Worker validates requests and dispatches tool calls to a Durable Object.
-- Open `/editor?token=YOUR_MCP_AUTH_TOKEN` in a browser. It embeds the official Photopea editor.
-- The browser bridge relays scripts to Photopea using its `postMessage` interface.
-- No VPS, local Node server, or fixed client IP is required.
+- `/mcp`: authenticated JSON-RPC MCP endpoint (Bearer token).
+- `/editor?token=...`: serves the adapted upstream browser bridge UI and embeds Photopea.
+- `/bridge`: authenticated same-origin WebSocket; the editor token is placed in a short-lived HttpOnly cookie, not exposed in the WebSocket URL.
+- Durable Object: keeps the browser WebSocket and correlates script responses and binary exports.
+- Photopea performs image editing in the browser. Cloudflare routes commands and results; no VPS, local Node server, fixed IP, or IP allowlisting is required.
 
-## Deploy
+## Tools currently exposed
 
-1. Create a Cloudflare Worker named `photopea-mcp-cloudflare` or change `name` in `wrangler.toml`.
-2. In GitHub repository settings, add Actions secrets:
-   - `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit)
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `MCP_AUTH_TOKEN` (a long random secret used by both the MCP client and the editor page)
-3. Add `MCP_AUTH_TOKEN` as a GitHub Actions secret. Use a long random token and do not commit it to the repository. The deploy workflow uploads it to the Worker after deployment.
-4. Push to `main` or run the Deploy Photopea MCP workflow manually.
-5. Open `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor?token=<MCP_AUTH_TOKEN>` in a browser and keep the tab active.
-6. Configure the MCP client with endpoint `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/mcp` and header `Authorization: Bearer <MCP_AUTH_TOKEN>`.
+**Documents:** create, get info, resize, close, crop, resize canvas, trim, rotate canvas.
 
-## Initial tools
+**Layers:** add layer, add fill layer, delete, select, set properties, move, duplicate, reorder, group, ungroup, get layer tree, layer mask, clipping mask, adjustment layer, merge, layer styles.
 
-- `photopea_status`
-- `photopea_execute_script`
-- `photopea_create_document`
-- `photopea_get_document_info`
+**Text and shapes:** add text, edit text, add shape.
 
-## Important limitations
+**Image operations:** apply adjustment, apply filter, transform layer, add gradient, make/modify/fill/clear selection.
 
-- This is a first-stage bridge, not yet the upstream server's full tool inventory.
-- The editor tab must remain open and active; mobile browsers may suspend background tabs.
-- The current bridge keeps pending requests in Durable Object memory. A Durable Object restart can interrupt in-flight work; reconnect and retry.
-- Raw script execution is powerful. Only give the MCP token to trusted clients and never expose the editor URL publicly.
-- Validate Photopea's current scripting/API response behavior before relying on exports or destructive operations.
+**Output and utilities:** get preview (image result), export image (base64 result), run script, undo, redo, load font, list fonts.
 
-## Upstream and references
+The API exposes 42 editing tools plus `photopea_status`. Tool schemas are published by `tools/list`.
+
+## Deployment
+
+### GitHub Actions secrets
+
+In this repository, open **Settings → Secrets and variables → Actions** and add:
+
+- `CLOUDFLARE_API_TOKEN` — token with permission to edit Workers scripts and manage Worker secrets.
+- `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID.
+- `MCP_AUTH_TOKEN` — a long random token (prefer a 64-character hexadecimal value). Never commit it.
+
+The workflow deploys the Worker and then uploads `MCP_AUTH_TOKEN` as a Worker secret. A push to `main` starts deployment.
+
+### Cloudflare
+
+The Worker name is set in `wrangler.toml` as `photopea-mcp-cloudflare`. Change it if you prefer a different name. The project uses a SQLite-backed Durable Object migration and static assets from `public/`.
+
+### Connect
+
+After a successful deployment, use:
+
+- Editor: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor?token=<MCP_AUTH_TOKEN>`
+- MCP endpoint: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/mcp`
+- MCP header: `Authorization: Bearer <MCP_AUTH_TOKEN>`
+
+Open the editor URL and wait for the bridge to show **Ready**. Keep that tab open while using the MCP tools. Do not share the editor URL or token.
+
+## Important constraints
+
+- The browser editor must remain open. Android may suspend background tabs; keep Photopea in the foreground during long operations.
+- Preview returns image content. Export currently returns base64 file data in a text result; large PSD exports can exceed practical MCP response sizes.
+- Local file paths are not available in Cloudflare Workers. The upstream `open_file`, `place_image`, `fill_placeholder`, and `batch_process` tools are not included in this port yet.
+- Not every Photopea feature is scriptable. Custom scripts have broad access to the open document and can make destructive changes.
+- The browser bridge is single-editor/single-session in this initial version. Multiple independent users need separate session routing before public multi-user use.
+- This has not yet passed a live Cloudflare deployment and end-to-end Photopea test. Do not treat the current commit as production-ready.
+
+## Source and API references
 
 - Upstream source: https://github.com/attalla1/photopea-mcp-server
 - Photopea API: https://www.photopea.com/api/
 - Photopea live scripting: https://www.photopea.com/api/live
 - Cloudflare Workers: https://developers.cloudflare.com/workers/
 - Durable Objects: https://developers.cloudflare.com/durable-objects/
-
-
-<!-- deploy status update: initial Cloudflare port -->
