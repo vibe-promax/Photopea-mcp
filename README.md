@@ -46,3 +46,6 @@ Cloudflare Worker + Durable Object browser bridge for controlling Photopea throu
 - Photopea live scripting: https://www.photopea.com/api/live
 - Cloudflare Workers: https://developers.cloudflare.com/workers/
 - Durable Objects: https://developers.cloudflare.com/durable-objects/
+
+
+<!-- deploy status update: initial Cloudflare port -->
