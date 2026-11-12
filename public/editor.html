@@ -401,6 +401,7 @@
 
         try {
           ws = new WebSocket(url);
+          ws.binaryType = 'arraybuffer';
         } catch (err) {
           scheduleReconnect();
           return;
@@ -430,6 +431,10 @@
         };
 
         ws.onmessage = function (event) {
+          if (event.data instanceof ArrayBuffer) {
+            handleLoadBinary(event.data);
+            return;
+          }
           var msg;
           try {
             msg = JSON.parse(event.data);
@@ -518,6 +523,20 @@
         pendingId  = id;
         echoBuffer = [];
         fileBuffer = null;
+      }
+
+      // Receive raw file bytes from the Cloudflare bridge (36-byte request ID prefix).
+      function handleLoadBinary(frame) {
+        var bytes = new Uint8Array(frame);
+        if (bytes.byteLength < 36) return;
+        var id = new TextDecoder().decode(bytes.subarray(0, 36));
+        var payload = bytes.slice(36);
+        pendingId = id;
+        echoBuffer = [];
+        fileBuffer = null;
+        previewMaxSize = 0;
+        var iframe = document.getElementById('photopea');
+        if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage(payload.buffer, '*');
       }
 
       // -----------------------------------------------------------------------
