@@ -88,7 +88,7 @@ export default {
           let total = 0;
           for (const source of inputs) {
             const file = await fetchPublicFile(source);
-            await bridgeCall(env, "/load", file);
+            await bridgeLoad(env, file);
             if (args.script) await bridgeCall(env, "/execute", { script: String(args.script) });
             const quality = Number(args.quality || 90);
             const fmt = (format === "jpg" || format === "webp") ? format + ":" + (quality / 100) : format;
@@ -270,7 +270,7 @@ async function placeRemoteImage(env: Env, args: Record<string, unknown>, fill: b
   if (fill) {
     await bridgeCall(env, "/execute", { script: buildSelectLayer({ target: String(args.placeholder || "") }) });
   }
-  await bridgeCall(env, "/load", file);
+  await bridgeLoad(env, file);
   const lines = [
     "var _targetDoc=app.documents.getByName('" + escapeString(docName) + "');",
     "var _sourceDoc=app.activeDocument;",
