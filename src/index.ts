@@ -23,6 +23,12 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") return json({ ok: true, service: "photopea-mcp-cloudflare", version: "0.1.0" });
+    if (url.pathname === "/bridge") {
+      const token = url.searchParams.get("token") || "";
+      if (!constantTimeEqual(token, env.MCP_AUTH_TOKEN)) return new Response("Unauthorized", { status: 401 });
+      const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
+      return stub.fetch("https://bridge.internal/ws", request);
+    }
     if (url.pathname === "/editor" && request.method === "GET") {
       const token = url.searchParams.get("token") || "";
       if (!constantTimeEqual(token, env.MCP_AUTH_TOKEN)) return new Response("Unauthorized", { status: 401 });
