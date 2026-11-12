@@ -24,7 +24,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health") return json({ ok: true, service: "photopea-mcp-cloudflare", version: "0.1.0" });
     if (url.pathname === "/bridge") {
-      const token = url.searchParams.get("token") || "";
+      const cookie = request.headers.get("cookie") || "";
+      const token = cookie.split(";").map(v => v.trim()).find(v => v.startsWith("pp_bridge="))?.slice("pp_bridge=".length) || "";
       if (!constantTimeEqual(token, env.MCP_AUTH_TOKEN)) return new Response("Unauthorized", { status: 401 });
       const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
       return stub.fetch("https://bridge.internal/ws", request);
@@ -74,6 +75,7 @@ export class PhotopeaBridge {
   private state: DurableObjectState;
   private socket?: WebSocket;
   private pending = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private ready = false;
   private ready = false;
   constructor(state: DurableObjectState) { this.state = state; }
   async fetch(request: Request): Promise<Response> {
