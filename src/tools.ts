@@ -59,5 +59,9 @@ export const TOOLS: Tool[] = [
  make("photopea_run_script","Run arbitrary Photopea JavaScript. Use app.echoToOE(value) to return text results.",{script:str()},["script"],a=>({script:buildRunScript(String(a.script||""))})),
  make("photopea_undo","Undo one or more operations.",{steps:{type:"integer",minimum:1,maximum:100}},[],a=>({script:buildUndo(Number(a.steps||1))})),
  make("photopea_redo","Redo one or more operations.",{steps:{type:"integer",minimum:1,maximum:100}},[],a=>({script:buildRedo(Number(a.steps||1))}))
+ make("photopea_ungroup_layers","Dissolve a named layer group and move its children to the document root.",{target:str("Layer group name")},["target"],a=>({script:"var _d=app.activeDocument;var _g=_d.layerSets.getByName('"+escapeString(String(a.target||""))+"');while(_g.layers.length>0){_g.layers[0].move(_d.layers[_d.layers.length-1],ElementPlacement.PLACEBEFORE);}_g.remove();app.echoToOE('ok');"})),
+ make("photopea_load_font","Load a public TTF or OTF font URL into Photopea. WOFF2 is not supported.",{url:str("Public HTTPS font URL")},["url"],a=>({script:"var _doc=app.activeDocument?app.activeDocument.name:null;app.open('"+escapeString(String(a.url||""))+"');if(_doc){app.activeDocument=app.documents.getByName(_doc);}app.echoToOE('Font loaded.');"})),
+ make("photopea_list_fonts","List Photopea font PostScript names, optionally filtered by a search term.",{search:str()},[],a=>({script:a.search?"var r=[];for(var i=0;i<app.fonts.length;i++){var n=app.fonts[i].postScriptName;if(n.toLowerCase().indexOf('"+escapeString(String(a.search).toLowerCase())+"')>=0)r.push(n);}app.echoToOE(JSON.stringify(r));":"var r=[];for(var i=0;i<app.fonts.length;i++){r.push(app.fonts[i].postScriptName);}app.echoToOE(JSON.stringify(r));"}))
+
 ];
 export function getTool(name: string) { return TOOLS.find(t => t.name === name); }
