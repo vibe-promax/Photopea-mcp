@@ -18,9 +18,8 @@ Cloudflare Worker + Durable Object browser bridge for controlling Photopea throu
 2. In GitHub repository settings, add Actions secrets:
    - `CLOUDFLARE_API_TOKEN` (Workers Scripts: Edit)
    - `CLOUDFLARE_ACCOUNT_ID`
-3. In Cloudflare, set the Worker secret:
-   `npx wrangler secret put MCP_AUTH_TOKEN`
-   Use a long random token. Do not commit it to GitHub.
+   - `MCP_AUTH_TOKEN` (a long random secret used by both the MCP client and the editor page)
+3. Add `MCP_AUTH_TOKEN` as a GitHub Actions secret. Use a long random token and do not commit it to the repository. The deploy workflow uploads it to the Worker after deployment.
 4. Push to `main` or run the Deploy Photopea MCP workflow manually.
 5. Open `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor?token=<MCP_AUTH_TOKEN>` in a browser and keep the tab active.
 6. Configure the MCP client with endpoint `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/mcp` and header `Authorization: Bearer <MCP_AUTH_TOKEN>`.
