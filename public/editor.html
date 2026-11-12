@@ -397,7 +397,7 @@
         }
 
         var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        var token = new URLSearchParams(location.search).get('token') || '';\n        var url = protocol + '//' + location.host + '/bridge?token=' + encodeURIComponent(token);
+        var url = protocol + '//' + location.host + '/bridge';
 
         try {
           ws = new WebSocket(url);
