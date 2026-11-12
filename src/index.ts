@@ -150,13 +150,17 @@ export class PhotopeaBridge {
     if (url.pathname === "/load" && request.method === "POST") {
       const active = this.socket || this.state.getWebSockets()[0];
       if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not connected and ready." }, 503);
-      const body = await request.json() as { data: string; filename: string };
-      if (typeof body.data !== "string" || body.data.length > 36000000 || typeof body.filename !== "string") return json({ ok: false, error: "File exceeds the 27 MB transfer limit or has an invalid payload." }, 413);
+      const bytes = new Uint8Array(await request.arrayBuffer());
+      const filename = request.headers.get("x-photopea-filename") || "photopea-file";
+      if (!bytes.byteLength || bytes.byteLength > 25 * 1024 * 1024) return json({ ok: false, error: "File must be between 1 byte and 25 MB." }, 413);
       const id = crypto.randomUUID();
+      const frame = new Uint8Array(36 + bytes.byteLength);
+      for (let i = 0; i < 36; i++) frame[i] = id.charCodeAt(i);
+      frame.set(bytes, 36);
       const outcome = await new Promise<any>((resolve, reject) => {
         const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("Photopea file load timed out.")); }, 60000);
         this.pending.set(id, { resolve, reject, timer });
-        try { active.send(JSON.stringify({ type: "load", id, data: body.data, filename: body.filename })); }
+        try { active.send(frame); }
         catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e instanceof Error ? e : new Error("Could not send file to Photopea.")); }
       }).catch(e => ({ error: e instanceof Error ? e.message : "File load failed." }));
       if (outcome?.error) return json({ ok: false, error: outcome.error }, 504);
