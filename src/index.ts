@@ -158,7 +158,7 @@ export class PhotopeaBridge {
       const outcome = await new Promise<any>((resolve, reject) => {
         const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("Photopea file load timed out.")); }, 60000);
         this.pending.set(id, { resolve, reject, timer });
-        try { active.send(frame); }
+        try { active.send(frame.buffer as ArrayBuffer); }
         catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e instanceof Error ? e : new Error("Could not send file to Photopea.")); }
       }).catch(e => ({ error: e instanceof Error ? e.message : "File load failed." }));
       if (outcome?.error) return json({ ok: false, error: outcome.error }, 504);
@@ -213,7 +213,7 @@ export class PhotopeaBridge {
   webSocketError(socket: WebSocket) { return this.webSocketClose(socket); }
 }
 
-async function fetchPublicFile(source: string): Promise<{ filename: string; bytes: Uint8Array }> {
+async function fetchPublicFile(source: string): Promise<{ filename: string; bytes: ArrayBuffer }> {
   let url: URL;
   try { url = new URL(source); } catch { throw new Error("Provide a valid public HTTPS file URL. Local file paths are not supported."); }
   const safe = (u: URL) => {
@@ -242,9 +242,9 @@ async function fetchPublicFile(source: string): Promise<{ filename: string; byte
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   let filename = url.pathname.split("/").pop() || "photopea-file";
   try { filename = decodeURIComponent(filename); } catch { /* retain the encoded filename */ }
-  return { filename, bytes };
+  return { filename, bytes: bytes.buffer as ArrayBuffer };
 }
-async function bridgeLoad(env: Env, file: { filename: string; bytes: Uint8Array }): Promise<any> {
+async function bridgeLoad(env: Env, file: { filename: string; bytes: ArrayBuffer }): Promise<any> {
   const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
   const response = await stub.fetch("https://bridge.internal/load", {
     method: "POST",
