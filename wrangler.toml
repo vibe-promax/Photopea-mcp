@@ -10,3 +10,8 @@ class_name = "PhotopeaBridge"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PhotopeaBridge"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
