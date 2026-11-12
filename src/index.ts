@@ -27,8 +27,6 @@ function safeEqual(a: string, b: string) {
   return diff === 0;
 }
 function toBase64(bytes: Uint8Array) {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(binary);
 }
 
@@ -74,7 +72,7 @@ export default {
         const args = p.arguments || {};
         if (p.name === "photopea_open_file") {
           const file = await fetchPublicFile(String(args.source || ""));
-          await bridgeCall(env, "/load", file);
+          await bridgeLoad(env, file);
           return result(rpc.id, { content: [{ type: "text", text: "File opened in Photopea: " + file.filename }] });
         }
         if (p.name === "photopea_place_image" || p.name === "photopea_fill_placeholder") {
@@ -215,7 +213,7 @@ export class PhotopeaBridge {
   webSocketError(socket: WebSocket) { return this.webSocketClose(socket); }
 }
 
-async function fetchPublicFile(source: string): Promise<{ filename: string; data: string }> {
+async function fetchPublicFile(source: string): Promise<{ filename: string; bytes: Uint8Array }> {
   let url: URL;
   try { url = new URL(source); } catch { throw new Error("Provide a valid public HTTPS file URL. Local file paths are not supported."); }
   const safe = (u: URL) => {
@@ -241,7 +239,18 @@ async function fetchPublicFile(source: string): Promise<{ filename: string; data
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   let filename = url.pathname.split("/").pop() || "photopea-file";
   try { filename = decodeURIComponent(filename); } catch { /* retain the encoded filename */ }
-  return { filename, data: btoa(binary) };
+  return { filename, bytes };
+}
+async function bridgeLoad(env: Env, file: { filename: string; bytes: Uint8Array }): Promise<any> {
+  const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
+  const response = await stub.fetch("https://bridge.internal/load", {
+    method: "POST",
+    headers: { "x-photopea-filename": file.filename, "content-type": "application/octet-stream" },
+    body: file.bytes
+  });
+  const payload = await response.json() as { ok: boolean; result?: any; error?: string };
+  if (!response.ok || !payload.ok || payload.result?.error) throw new Error(payload.error || payload.result?.error || "Photopea file transfer failed.");
+  return payload.result || {};
 }
 async function bridgeCall(env: Env, path: string, body: unknown): Promise<any> {
   const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
