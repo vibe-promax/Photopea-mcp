@@ -1,4 +1,5 @@
 import { TOOLS, getTool } from "./tools.js";
+import { buildFitToLayer, escapeString } from "./bridge/script-builder.js";
 
 export interface Env {
   PHOTOPEA_BRIDGE: DurableObjectNamespace;
@@ -8,7 +9,11 @@ export interface Env {
 type Rpc = { jsonrpc: "2.0"; id?: string | number; method: string; params?: Record<string, unknown> };
 const TOOL_LIST = [
   { name: "photopea_status", description: "Check whether the Photopea browser editor is connected and ready.", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
-  ...TOOLS.map(({ build: _build, ...tool }) => tool)
+  ...TOOLS.map(({ build: _build, ...tool }) => tool),
+
+  { name: "photopea_open_file", description: "Open an image or PSD from a public HTTPS URL in Photopea. Local filesystem paths are not supported on Cloudflare.", inputSchema: { type: "object", properties: { source: { type: "string" } }, required: ["source"], additionalProperties: false } },
+  { name: "photopea_place_image", description: "Place an image from a public HTTPS URL into the active document as a new layer.", inputSchema: { type: "object", properties: { source: { type: "string" }, x: { type: "number" }, y: { type: "number" }, width: { type: "number" }, height: { type: "number" }, name: { type: "string" } }, required: ["source"], additionalProperties: false } },
+  { name: "photopea_fill_placeholder", description: "Fill a named placeholder layer with an image from a public HTTPS URL.", inputSchema: { type: "object", properties: { placeholder: { type: "string" }, source: { type: "string" }, fit: { type: "string", enum: ["cover", "contain"] }, mask: { type: "boolean" }, name: { type: "string" } }, required: ["placeholder", "source"], additionalProperties: false } }
 ];
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
