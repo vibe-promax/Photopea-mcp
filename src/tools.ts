@@ -7,7 +7,7 @@ import {
   buildFillSelection, buildClearSelection, buildCrop, buildResizeCanvas, buildTrim,
   buildRotateCanvas, buildLayerMask, buildSetClippingMask, buildAddAdjustmentLayer,
   buildMergeLayers, buildSetLayerStyle, buildFitToLayer, buildExportImage, buildRunScript,
-  buildUndo, buildRedo
+  buildUndo, buildRedo, escapeString
 } from "./bridge/script-builder.js";
 type Schema = { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties?: boolean };
 type Tool = { name: string; description: string; inputSchema: Schema; build: (a: Record<string, any>) => { script: string; expectFiles?: boolean; previewMaxSize?: number } };
