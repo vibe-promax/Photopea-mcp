@@ -20,11 +20,6 @@ function json(data: unknown, status = 200) {
 }
 function result(id: Rpc["id"], value: unknown) { return json({ jsonrpc: "2.0", id: id ?? null, result: value }); }
 function error(id: Rpc["id"], code: number, message: string) { return json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }, 400); }
-function safeEqual(a: string, b: string) {
-  if (!a || !b || a.length !== b.length) return false;
-  let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
 function toBase64(bytes: Uint8Array) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
