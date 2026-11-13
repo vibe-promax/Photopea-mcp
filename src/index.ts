@@ -3,7 +3,6 @@ import { buildFitToLayer, buildSelectLayer, escapeString } from "./bridge/script
 
 export interface Env {
   PHOTOPEA_BRIDGE: DurableObjectNamespace;
-  MCP_AUTH_TOKEN: string;
   ASSETS: Fetcher;
 }
 type Rpc = { jsonrpc: "2.0"; id?: string | number; method: string; params?: Record<string, unknown> };
@@ -37,20 +36,14 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health") return json({ ok: true, service: "photopea-mcp-cloudflare", version: "0.2.0", tools: TOOL_LIST.length });
     if (url.pathname === "/bridge") {
-      const cookie = request.headers.get("cookie") || "";
-      const token = cookie.split(";").map(v => v.trim()).find(v => v.startsWith("pp_bridge="))?.slice(10) || "";
-      if (!safeEqual(decodeURIComponent(token), env.MCP_AUTH_TOKEN)) return new Response("Unauthorized", { status: 401 });
       const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
       return stub.fetch("https://bridge.internal/ws", request);
     }
     if (url.pathname === "/editor" && request.method === "GET") {
-      const token = url.searchParams.get("token") || "";
-      if (!safeEqual(token, env.MCP_AUTH_TOKEN)) return new Response("Unauthorized", { status: 401 });
       const asset = await env.ASSETS.fetch(new Request(new URL("/editor.html", request.url), request));
       const headers = new Headers(asset.headers);
       headers.set("cache-control", "no-store");
       headers.set("referrer-policy", "no-referrer");
-      headers.append("set-cookie", "pp_bridge=" + encodeURIComponent(token) + "; Path=/bridge; Max-Age=3600; Secure; HttpOnly; SameSite=Strict");
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (url.pathname !== "/mcp" || request.method !== "POST") return new Response("Not found", { status: 404 });
