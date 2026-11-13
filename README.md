@@ -6,9 +6,9 @@ A Cloudflare Workers adaptation of the MIT-licensed [attalla1/photopea-mcp-serve
 
 ## Architecture
 
-- `/mcp`: authenticated JSON-RPC MCP endpoint (Bearer token).
-- `/editor?token=...`: serves the adapted upstream browser bridge UI and embeds Photopea.
-- `/bridge`: authenticated same-origin WebSocket; the editor token is placed in a short-lived HttpOnly cookie, not exposed in the WebSocket URL.
+- `/mcp`: JSON-RPC MCP endpoint (currently public, with no authentication).
+- `/editor`: serves the adapted upstream browser bridge UI and embeds Photopea.
+- `/bridge`: same-origin WebSocket used by the editor bridge.
 - Durable Object: keeps the browser WebSocket and correlates script responses and binary exports.
 - Photopea performs image editing in the browser. Cloudflare routes commands and results; no VPS, local Node server, fixed IP, or IP allowlisting is required.
 
@@ -34,9 +34,8 @@ In this repository, open **Settings → Secrets and variables → Actions** and 
 
 - `CLOUDFLARE_API_TOKEN` — token with permission to edit Workers scripts and manage Worker secrets.
 - `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID.
-- `MCP_AUTH_TOKEN` — a long random token (prefer a 64-character hexadecimal value). Never commit it.
 
-The workflow deploys the Worker and then uploads `MCP_AUTH_TOKEN` as a Worker secret. A push to `main` starts deployment.
+The workflow deploys the Worker. A push to `main` starts deployment. Only the Cloudflare API token and account ID are required.
 
 ### Cloudflare
 
@@ -46,11 +45,10 @@ The Worker name is set in `wrangler.toml` as `photopea-mcp-cloudflare`. Change i
 
 After a successful deployment, use:
 
-- Editor: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor?token=<MCP_AUTH_TOKEN>`
+- Editor: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor`
 - MCP endpoint: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/mcp`
-- MCP header: `Authorization: Bearer <MCP_AUTH_TOKEN>`
 
-Open the editor URL and wait for the bridge to show **Ready**. Keep that tab open while using the MCP tools. Do not share the editor URL or token.
+**Security warning:** Authentication is intentionally disabled for this initial test deployment. Anyone who discovers the Worker URL can call the MCP tools and control the shared Photopea editor session. Do not use sensitive files or expose the URL publicly. Add authentication before production use. Open the editor URL and wait for the bridge to show **Ready**. Keep that tab open while using the MCP tools.
 
 ## Important constraints
 
@@ -59,7 +57,7 @@ Open the editor URL and wait for the bridge to show **Ready**. Keep that tab ope
 - Local filesystem paths are not available in Cloudflare Workers. File-open, image-placement, placeholder-fill, and batch tools accept public HTTPS URLs only. Batch processing is limited to five inputs and a 20 MB combined export response.
 - Not every Photopea feature is scriptable. Custom scripts have broad access to the open document and can make destructive changes.
 - The browser bridge is single-editor/single-session in this initial version. Multiple independent users need separate session routing before public multi-user use.
-- This has not yet passed a live Cloudflare deployment and end-to-end Photopea test. Do not treat the current commit as production-ready.
+- Authentication is currently disabled by design for initial testing; the MCP endpoint and editor bridge are publicly accessible. Do not treat this as production-ready.
 
 ## Source and API references
 
