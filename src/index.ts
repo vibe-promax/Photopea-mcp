@@ -42,8 +42,6 @@ export default {
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (url.pathname !== "/mcp" || request.method !== "POST") return new Response("Not found", { status: 404 });
-    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    if (!safeEqual(auth, env.MCP_AUTH_TOKEN)) return json({ error: "Unauthorized" }, 401);
     let rpc: Rpc;
     try { rpc = await request.json() as Rpc; } catch { return error(undefined, -32700, "Invalid JSON"); }
     if (rpc.jsonrpc !== "2.0" || typeof rpc.method !== "string") return error(rpc.id, -32600, "Invalid JSON-RPC request");
