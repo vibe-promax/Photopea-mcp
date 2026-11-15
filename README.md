@@ -48,7 +48,9 @@ After a successful deployment, use:
 - Editor: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/editor`
 - MCP endpoint: `https://photopea-mcp-cloudflare.<your-subdomain>.workers.dev/mcp`
 
-**Security warning:** Authentication is intentionally disabled for this initial test deployment. Anyone who discovers the Worker URL can call the MCP tools and control the shared Photopea editor session. Do not use sensitive files or expose the URL publicly. Add authentication before production use. Open the editor URL and wait for the bridge to show **Ready**. Keep that tab open while using the MCP tools.
+**Claude connector setup:** This server is intentionally authless for the initial test. In Claude, add the remote MCP URL and choose **No sign in** under Authentication. Do not choose an OAuth client or enter a Client ID. If the connector was already saved with OAuth, remove it and add it again because Claude does not let you change authentication after saving. Then open `/editor` in a browser and wait until the status bar says **Connected — Photopea ready**. Keep that tab open while using the MCP tools.
+
+**Security warning:** Authentication is intentionally disabled. Anyone who discovers the Worker URL can call the MCP tools and control the shared Photopea editor session. Do not use sensitive files or expose the URL publicly. Add authentication and per-user editor sessions before production use.
 
 ## Important constraints
 
