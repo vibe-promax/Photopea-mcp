@@ -33,3 +33,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy
+      - name: Smoke test deployed endpoints
+        run: |
+          BASE="https://photopea-mcp-cloudflare.vibemcp.workers.dev"
+          for attempt in $(seq 1 12); do
+            if curl -fsS "$BASE/health" -o /tmp/health.json; then break; fi
+            sleep 5
+          done
+          grep -q '"ok":true' /tmp/health.json
+          EDITOR_STATUS=$(curl -sS -o /tmp/editor.html -w '%{http_code}' "$BASE/editor")
+          echo "Editor HTTP status: $EDITOR_STATUS"
+          test "$EDITOR_STATUS" = "200"
+          grep -q 'Photopea MCP Bridge' /tmp/editor.html
+          BRIDGE_STATUS=$(curl -sS -o /tmp/bridge.txt -w '%{http_code}' "$BASE/bridge")
+          echo "Bridge non-upgrade HTTP status: $BRIDGE_STATUS (expected 426)"
+          test "$BRIDGE_STATUS" = "426"
