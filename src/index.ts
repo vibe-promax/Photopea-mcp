@@ -63,7 +63,12 @@ export default {
       if (p.name === "photopea_status") {
         const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
         const response = await stub.fetch("https://bridge.internal/status");
-        return result(rpc.id, { content: [{ type: "text", text: await response.text() }] });
+        const status = await response.json() as { connected: boolean; ready: boolean };
+        return result(rpc.id, { content: [{ type: "text", text: JSON.stringify({
+          ...status,
+          editorUrl: new URL("/editor", request.url).toString(),
+          nextStep: status.ready ? "Photopea is ready." : "Open editorUrl in a browser, keep that tab open, and wait until it displays Connected — Photopea ready. No token is required."
+        }) }] });
       }
       try {
         const args = p.arguments || {};
@@ -165,7 +170,7 @@ export class PhotopeaBridge {
       return json({ ok: true, result: outcome });
     }
     if (url.pathname === "/execute" && request.method === "POST") {
-      if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not ready. Open /editor?token=… and wait for the bridge to show Ready." }, 503);
+      if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not ready. Open /editor in a browser and keep that tab open until it shows 'Connected — Photopea ready'. No token is required." }, 503);
       const body = await request.json() as { script: string; expectFiles?: boolean; previewMaxSize?: number };
       if (typeof body.script !== "string" || !body.script.trim() || body.script.length > 200000) return json({ ok: false, error: "Script must contain 1–200,000 characters." }, 400);
       const id = crypto.randomUUID();
