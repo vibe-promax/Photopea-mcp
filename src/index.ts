@@ -39,7 +39,7 @@ export default {
       return stub.fetch(bridgeRequest);
     }
     if ((url.pathname === "/editor" || url.pathname === "/editor.html") && request.method === "GET") {
-      const assetRequest = new Request("https://assets.internal/editor.html", {
+      const assetRequest = new Request(new URL("/editor.html", url.origin), {
         method: "GET",
         headers: { "accept": "text/html" }
       });
