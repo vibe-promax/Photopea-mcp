@@ -31,14 +31,23 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/health") return json({ ok: true, service: "photopea-mcp-cloudflare", version: "0.2.0", tools: TOOL_LIST.length });
     if (url.pathname === "/bridge") {
+      if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+        return new Response("WebSocket upgrade required.", { status: 426, headers: { "content-type": "text/plain", "upgrade": "websocket" } });
+      }
       const stub = env.PHOTOPEA_BRIDGE.get(env.PHOTOPEA_BRIDGE.idFromName("shared-editor"));
-      return stub.fetch("https://bridge.internal/ws", request);
+      const bridgeRequest = new Request("https://bridge.internal/ws", request);
+      return stub.fetch(bridgeRequest);
     }
-    if (url.pathname === "/editor" && request.method === "GET") {
-      const asset = await env.ASSETS.fetch(new Request(new URL("/editor.html", request.url), request));
+    if ((url.pathname === "/editor" || url.pathname === "/editor.html") && request.method === "GET") {
+      const assetRequest = new Request("https://assets.internal/editor.html", {
+        method: "GET",
+        headers: { "accept": "text/html" }
+      });
+      const asset = await env.ASSETS.fetch(assetRequest);
       const headers = new Headers(asset.headers);
       headers.set("cache-control", "no-store");
       headers.set("referrer-policy", "no-referrer");
+      headers.set("x-content-type-options", "nosniff");
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (url.pathname !== "/mcp" || request.method !== "POST") return new Response("Not found", { status: 404 });
@@ -124,6 +133,9 @@ export class PhotopeaBridge {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/ws") {
+      if (request.method !== "GET" || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+        return new Response("WebSocket upgrade required.", { status: 426, headers: { "content-type": "text/plain", "upgrade": "websocket" } });
+      }
       const pair = new WebSocketPair();
       const client = pair[0], server = pair[1];
       this.state.acceptWebSocket(server);
