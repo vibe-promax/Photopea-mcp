@@ -191,7 +191,7 @@ export class PhotopeaBridge {
       const response = await new Promise<any>((resolve, reject) => {
         const timer = setTimeout(() => { this.pending.delete(id); reject(new Error("Photopea timed out.")); }, body.expectFiles ? 60000 : 30000);
         this.pending.set(id, { resolve, reject, timer });
-        try { active.send(JSON.stringify({ type: "execute", id, script: body.script, expectFiles: !!body.expectFiles, previewMaxSize: body.previewMaxSize || 0 })); }
+        try { active.send(JSON.stringify({ type: "execute", id, script: body.script, expectFiles: !!body.expectFiles, previewMaxSize: body.previewMaxSize || 0, timeoutMs: body.expectFiles ? 65000 : 35000 })); }
         catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e instanceof Error ? e : new Error("WebSocket send failed.")); }
       }).catch(e => ({ error: e instanceof Error ? e.message : "Execution failed" }));
       if (response?.error) return json({ ok: false, error: response.error }, 504);
