@@ -525,13 +525,19 @@
           pendingId = null;
           commandBusy = false;
           probeInFlight = false;
-          photopeaReady = false;
           echoBuffer = [];
           fileBuffer = null;
           commandQueue = [];
           sendToWS({ type: 'status', status: 'waiting' });
-          sendToWS({ type: 'result', id: command.id, success: false, error: 'Photopea did not acknowledge the operation before timeout. Reload the editor tab and reconnect.' });
-          statusText.textContent = 'Connected — Photopea not responding';
+          if (command.kind === 'probe') {
+            // A failed health probe must not permanently disable future probes.
+            // Keep the iframe handshake state and retry on the next interval.
+            statusText.textContent = 'Connected — retrying Photopea probe';
+          } else {
+            photopeaReady = false;
+            sendToWS({ type: 'result', id: command.id, success: false, error: 'Photopea did not acknowledge the operation before timeout. Reload the editor tab and reconnect.' });
+            statusText.textContent = 'Connected — Photopea not responding';
+          }
           commandTimer = null;
         }, timeoutMs);
         echoBuffer = [];
@@ -648,13 +654,18 @@
         if (id.indexOf('probe:') === 0) {
           var expected = 'MCP_PONG:' + id.substring(6);
           probeInFlight = false;
-          if (resultData === expected) {
+          // Photopea may emit other informational strings in the same transaction.
+          // Accept the exact nonce among the echoed messages, not only as the sole message.
+          var probeConfirmed = echoBuffer.some(function (value) {
+            return typeof value === 'string' && value.trim() === expected;
+          });
+          if (probeConfirmed) {
             statusText.textContent = 'Connected — Photopea ready';
             sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
           } else {
-            photopeaReady = false;
+            // Do not latch into a permanent not-ready state: the periodic probe retries.
             sendToWS({ type: 'status', status: 'waiting' });
-            statusText.textContent = 'Connected — Photopea not responding';
+            statusText.textContent = 'Connected — retrying Photopea probe';
           }
         } else if (fileBuffer !== null) {
           if (previewMaxSize > 0) downscalePng(fileBuffer, previewMaxSize).then(function (buf) { sendFile(id, buf); });
