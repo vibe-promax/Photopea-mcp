@@ -312,6 +312,7 @@
       var commandBusy     = false;
       var probeInFlight   = false;
       var probeCounter    = 0;
+      var commandTimer    = null;
 
       // -----------------------------------------------------------------------
       // Collapsible log
@@ -424,6 +425,8 @@
           setConnected(false);
           // Never leave an abandoned command blocking the serialized queue after a socket drop.
           pendingId = null;
+          if (commandTimer) clearTimeout(commandTimer);
+          commandTimer = null;
           echoBuffer = [];
           fileBuffer = null;
           commandBusy = false;
@@ -515,6 +518,22 @@
         commandBusy = true;
         var command = commandQueue.shift();
         pendingId = command.id;
+        if (commandTimer) clearTimeout(commandTimer);
+        var timeoutMs = command.kind === 'probe' ? 20000 : (command.timeoutMs || 65000);
+        commandTimer = setTimeout(function () {
+          if (pendingId !== command.id) return;
+          pendingId = null;
+          commandBusy = false;
+          probeInFlight = false;
+          photopeaReady = false;
+          echoBuffer = [];
+          fileBuffer = null;
+          commandQueue = [];
+          sendToWS({ type: 'status', status: 'waiting' });
+          sendToWS({ type: 'result', id: command.id, success: false, error: 'Photopea did not acknowledge the operation before timeout. Reload the editor tab and reconnect.' });
+          statusText.textContent = 'Connected — Photopea not responding';
+          commandTimer = null;
+        }, timeoutMs);
         echoBuffer = [];
         fileBuffer = null;
         previewMaxSize = command.previewMaxSize || 0;
@@ -622,6 +641,8 @@
 
         var id = pendingId;
         pendingId = null;
+        if (commandTimer) clearTimeout(commandTimer);
+        commandTimer = null;
 
         var resultData = echoBuffer.length > 0 ? echoBuffer.join('\n') : null;
         if (id.indexOf('probe:') === 0) {
@@ -683,6 +704,8 @@
           sendToWS({ type: 'result', id: pendingId, success: false, error: 'Photopea iframe reloaded during an operation.' });
         }
         pendingId = null;
+        if (commandTimer) clearTimeout(commandTimer);
+        commandTimer = null;
         commandQueue = [];
         commandBusy = false;
         probeInFlight = false;
