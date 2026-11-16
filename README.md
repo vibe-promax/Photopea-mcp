@@ -55,6 +55,8 @@ After a successful deployment, use:
 ## Important constraints
 
 - The browser editor must remain open. Android may suspend background tabs; keep Photopea in the foreground during long operations.
+- Readiness is verified with Photopea's documented `done` handshake plus a periodic `app.echoToOE` round-trip probe. The server expires readiness when no successful Photopea probe arrives for 45 seconds; a green browser status alone is not sufficient.
+- Editor commands and file imports are serialized in the browser bridge to prevent overlapping scripts from overwriting the single in-flight request. If Photopea does not acknowledge a command before its timeout, the bridge reports the failure and invalidates readiness rather than leaving the queue permanently blocked.
 - Preview returns image content. Export currently returns base64 file data in a text result; large PSD exports can exceed practical MCP response sizes.
 - Local filesystem paths are not available in Cloudflare Workers. File-open, image-placement, placeholder-fill, and batch tools accept public HTTPS URLs only. Batch processing is limited to five inputs and a 20 MB combined export response.
 - Not every Photopea feature is scriptable. Custom scripts have broad access to the open document and can make destructive changes.
