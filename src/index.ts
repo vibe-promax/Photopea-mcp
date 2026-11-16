@@ -165,7 +165,7 @@ export class PhotopeaBridge {
       return json({ connected, ready, lastHeartbeatAt: await this.state.storage.get<number>("lastHeartbeatAt") || 0 });
     }
     if (url.pathname === "/load" && request.method === "POST") {
-      const active = this.socket || this.state.getWebSockets()[0];
+      const active = this.getActiveSocket();
       if (!active || !(await this.isReady())) return json({ ok: false, error: "Photopea is not responsive. Bring the /editor tab to the foreground and wait for 'Connected — Photopea ready'." }, 503);
       const bytes = new Uint8Array(await request.arrayBuffer());
       const filename = request.headers.get("x-photopea-filename") || "photopea-file";
