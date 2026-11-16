@@ -427,6 +427,7 @@
           echoBuffer = [];
           fileBuffer = null;
           commandBusy = false;
+          probeInFlight = false;
           commandQueue = [];
           // 4001 = the server switched to a newer tab; reconnecting would steal the session back
           if (event.code === 4001) {
@@ -678,7 +679,16 @@
       // -----------------------------------------------------------------------
       // If Photopea reloads, invalidate readiness until its new "done" handshake.
       document.getElementById('photopea').addEventListener('load', function () {
+        if (pendingId !== null && wsReady) {
+          sendToWS({ type: 'result', id: pendingId, success: false, error: 'Photopea iframe reloaded during an operation.' });
+        }
+        pendingId = null;
+        commandQueue = [];
+        commandBusy = false;
+        probeInFlight = false;
         photopeaReady = false;
+        echoBuffer = [];
+        fileBuffer = null;
         if (wsReady) sendToWS({ type: 'status', status: 'waiting' });
         statusText.textContent = wsReady ? 'Connected — waiting for Photopea' : 'Disconnected';
       });
