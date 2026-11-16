@@ -420,6 +420,12 @@
 
         ws.onclose = function (event) {
           setConnected(false);
+          // Never leave an abandoned command blocking the serialized queue after a socket drop.
+          pendingId = null;
+          echoBuffer = [];
+          fileBuffer = null;
+          commandBusy = false;
+          commandQueue = [];
           // 4001 = the server switched to a newer tab; reconnecting would steal the session back
           if (event.code === 4001) {
             statusText.textContent = 'Session moved to another tab. You can close this one.';
