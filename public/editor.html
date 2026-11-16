@@ -310,6 +310,8 @@
       var previewMaxSize  = 0;      // > 0: downscale the exported PNG before sending
       var commandQueue    = [];
       var commandBusy     = false;
+      var probeInFlight   = false;
+      var probeCounter    = 0;
 
       // -----------------------------------------------------------------------
       // Collapsible log
@@ -414,7 +416,7 @@
           setConnected(true);
           if (photopeaReady) {
             sendToWS({ type: 'status', status: 'ready' });
-            sendHeartbeat();
+            probePhotopea();
           }
         };
 
@@ -467,16 +469,23 @@
         }
       }
 
-      function sendHeartbeat() {
-        if (photopeaReady && wsReady) {
-          sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
-        }
+      function probePhotopea() {
+        if (!photopeaReady || !wsReady || commandBusy || commandQueue.length || probeInFlight) return;
+        probeInFlight = true;
+        var token = String(Date.now()) + '_' + (++probeCounter);
+        commandQueue.push({
+          kind: 'probe',
+          id: 'probe:' + token,
+          script: "app.echoToOE('MCP_PONG:" + token + "');"
+        });
+        processCommandQueue();
       }
 
-      // Expire server readiness when background-tab throttling pauses this page.
-      setInterval(sendHeartbeat, 15000);
+      // A heartbeat is accepted only after Photopea itself echoes a fresh probe.
+      // This detects a frozen iframe, not merely a live outer browser tab.
+      setInterval(probePhotopea, 15000);
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) sendHeartbeat();
+        if (!document.hidden) probePhotopea();
       });
 
       // -----------------------------------------------------------------------
@@ -599,9 +608,9 @@
           setPhotopeaReady();
           if (wsReady) {
             sendToWS({ type: 'status', status: 'ready' });
-            sendHeartbeat();
           }
           processCommandQueue();
+          probePhotopea();
           return;
         }
 
@@ -613,14 +622,22 @@
         var id = pendingId;
         pendingId = null;
 
-        if (fileBuffer !== null) {
+        var resultData = echoBuffer.length > 0 ? echoBuffer.join('\n') : null;
+        if (id.indexOf('probe:') === 0) {
+          var expected = 'MCP_PONG:' + id.substring(6);
+          probeInFlight = false;
+          if (resultData === expected) {
+            sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
+          } else {
+            photopeaReady = false;
+            sendToWS({ type: 'status', status: 'waiting' });
+            statusText.textContent = 'Connected — Photopea not responding';
+          }
+        } else if (fileBuffer !== null) {
           if (previewMaxSize > 0) downscalePng(fileBuffer, previewMaxSize).then(function (buf) { sendFile(id, buf); });
           else sendFile(id, fileBuffer);
         } else {
-          // Script result (echoToOE strings joined)
-          var resultData = echoBuffer.length > 0 ? echoBuffer.join('\n') : null;
-          // Detect script errors: if the result contains an error pattern and
-          // no explicit echoToOE('ok') was received, treat it as a failure.
+          // Detect script errors from Photopea's echoed result.
           var hasError = resultData !== null && /^(ReferenceError|TypeError|SyntaxError|Error|RangeError):/.test(resultData);
           sendToWS({
             type:    'result',
