@@ -593,7 +593,9 @@
           setPhotopeaReady();
           if (wsReady) {
             sendToWS({ type: 'status', status: 'ready' });
+            sendHeartbeat();
           }
+          processCommandQueue();
           return;
         }
 
