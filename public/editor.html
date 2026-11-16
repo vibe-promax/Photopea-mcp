@@ -308,6 +308,8 @@
       var echoBuffer      = [];     // string messages from Photopea before "done"
       var fileBuffer      = null;   // ArrayBuffer from Photopea (last one wins)
       var previewMaxSize  = 0;      // > 0: downscale the exported PNG before sending
+      var commandQueue    = [];
+      var commandBusy     = false;
 
       // -----------------------------------------------------------------------
       // Collapsible log
@@ -410,9 +412,9 @@
         ws.onopen = function () {
           reconnectDelay = 1000;
           setConnected(true);
-          // If Photopea already signalled ready before WS connected, report now
           if (photopeaReady) {
             sendToWS({ type: 'status', status: 'ready' });
+            sendHeartbeat();
           }
         };
 
@@ -459,6 +461,18 @@
         }
       }
 
+      function sendHeartbeat() {
+        if (photopeaReady && wsReady) {
+          sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
+        }
+      }
+
+      // Expire server readiness when background-tab throttling pauses this page.
+      setInterval(sendHeartbeat, 15000);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) sendHeartbeat();
+      });
+
       // -----------------------------------------------------------------------
       // Server -> client message handling
       // -----------------------------------------------------------------------
@@ -476,12 +490,28 @@
       // Execute: forward script to Photopea, collect results, send back
       // -----------------------------------------------------------------------
       function handleExecute(msg) {
-        pendingId   = msg.id;
-        echoBuffer  = [];
-        fileBuffer  = null;
-        previewMaxSize = msg.previewMaxSize || 0;
+        commandQueue.push({ kind: 'script', id: msg.id, script: msg.script, previewMaxSize: msg.previewMaxSize || 0 });
+        processCommandQueue();
+      }
 
-        sendToPhotopea(msg.script);
+      function processCommandQueue() {
+        if (commandBusy || !photopeaReady || !wsReady || commandQueue.length === 0) return;
+        commandBusy = true;
+        var command = commandQueue.shift();
+        pendingId = command.id;
+        echoBuffer = [];
+        fileBuffer = null;
+        previewMaxSize = command.previewMaxSize || 0;
+        var iframe = document.getElementById('photopea');
+        if (!iframe || !iframe.contentWindow) {
+          sendToWS({ type: 'result', id: command.id, success: false, error: 'Photopea iframe is unavailable.' });
+          pendingId = null;
+          commandBusy = false;
+          processCommandQueue();
+          return;
+        }
+        if (command.kind === 'binary') iframe.contentWindow.postMessage(command.payload, '*');
+        else iframe.contentWindow.postMessage(command.script, '*');
       }
 
       function sendToPhotopea(payload) {
@@ -512,17 +542,8 @@
           bytes[i] = binary.charCodeAt(i);
         }
 
-        // Photopea accepts an ArrayBuffer directly for file loading
-        var iframe = document.getElementById('photopea');
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage(bytes.buffer, '*');
-        }
-
-        // The load operation completes when Photopea sends "done"
-        // We treat it as a pending request so we wait for "done" then ACK
-        pendingId  = id;
-        echoBuffer = [];
-        fileBuffer = null;
+        commandQueue.push({ kind: 'binary', id: id, payload: bytes.buffer });
+        processCommandQueue();
       }
 
       // Receive raw file bytes from the Cloudflare bridge (36-byte request ID prefix).
@@ -531,12 +552,8 @@
         if (bytes.byteLength < 36) return;
         var id = new TextDecoder().decode(bytes.subarray(0, 36));
         var payload = bytes.slice(36);
-        pendingId = id;
-        echoBuffer = [];
-        fileBuffer = null;
-        previewMaxSize = 0;
-        var iframe = document.getElementById('photopea');
-        if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage(payload.buffer, '*');
+        commandQueue.push({ kind: 'binary', id: id, payload: payload.buffer });
+        processCommandQueue();
       }
 
       // -----------------------------------------------------------------------
@@ -548,9 +565,11 @@
         if (!iframe || (iframe.contentWindow && event.source !== iframe.contentWindow)) return;
         var data = event.data;
 
-        // Any message from Photopea means it's loaded — mark ready on first contact
-        if (!photopeaReady) {
+        // Only Photopea's documented "done" handshake proves readiness.
+        // Other messages must never mark the editor ready.
+        if (typeof data === 'string' && data === 'done') {
           handlePhotopea_done();
+          return;
         }
 
         // ArrayBuffer = exported file data
@@ -561,12 +580,8 @@
 
         // String messages
         if (typeof data === 'string') {
-          if (data === 'done') {
-            handlePhotopea_done();
-          } else {
-            // echoToOE output or other string result
-            echoBuffer.push(data);
-          }
+          // echoToOE output; ignore unrelated messages while idle.
+          if (pendingId !== null) echoBuffer.push(data);
           return;
         }
       });
@@ -610,6 +625,8 @@
 
         echoBuffer = [];
         fileBuffer = null;
+        commandBusy = false;
+        processCommandQueue();
       }
 
       // Binary frame: 36-char request id, then the raw file (no base64, so large PSDs fit)
@@ -634,6 +651,13 @@
       }
 
       // -----------------------------------------------------------------------
+      // If Photopea reloads, invalidate readiness until its new "done" handshake.
+      document.getElementById('photopea').addEventListener('load', function () {
+        photopeaReady = false;
+        if (wsReady) sendToWS({ type: 'status', status: 'waiting' });
+        statusText.textContent = wsReady ? 'Connected — waiting for Photopea' : 'Disconnected';
+      });
+
       // Boot
       // -----------------------------------------------------------------------
       setConnected(false);
