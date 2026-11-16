@@ -392,6 +392,12 @@
         logCount.textContent = entryCount + (entryCount === 1 ? ' entry' : ' entries');
       }
 
+      // Diagnostic entries are intentionally short and never include full scripts or file data.
+      function addDiagnostic(label, detail, isError) {
+        var summary = detail ? String(detail).slice(0, 220) : '';
+        addLogEntry('DIAG ' + label, summary, !!isError);
+      }
+
       // -----------------------------------------------------------------------
       // WebSocket connection
       // -----------------------------------------------------------------------
@@ -414,6 +420,7 @@
 
         ws.onopen = function () {
           reconnectDelay = 1000;
+          addDiagnostic('WS OPEN', 'Bridge WebSocket connected');
           setConnected(true);
           if (photopeaReady) {
             sendToWS({ type: 'status', status: 'ready' });
@@ -422,6 +429,7 @@
         };
 
         ws.onclose = function (event) {
+          addDiagnostic('WS CLOSE', 'code=' + event.code + ' reason=' + (event.reason || '(none)'), true);
           setConnected(false);
           // Never leave an abandoned command blocking the serialized queue after a socket drop.
           pendingId = null;
@@ -441,6 +449,7 @@
         };
 
         ws.onerror = function () {
+          addDiagnostic('WS ERROR', 'WebSocket reported an error; close event should follow', true);
           // onclose fires right after; no extra handling needed
         };
 
@@ -497,8 +506,10 @@
       // -----------------------------------------------------------------------
       function handleServerMessage(msg) {
         if (msg.type === 'execute') {
+          addDiagnostic('MCP COMMAND', 'execute id=' + msg.id + ' scriptLength=' + String(msg.script || '').length);
           handleExecute(msg);
         } else if (msg.type === 'load') {
+          addDiagnostic('MCP LOAD', 'load id=' + msg.id + ' filename=' + (msg.filename || 'file'));
           handleLoad(msg);
         } else if (msg.type === 'activity') {
           addLogEntry(msg.tool || 'tool', msg.summary || '', false);
@@ -520,8 +531,10 @@
         pendingId = command.id;
         if (commandTimer) clearTimeout(commandTimer);
         var timeoutMs = command.kind === 'probe' ? 20000 : (command.timeoutMs || 65000);
+        addDiagnostic('SEND TO PP', 'kind=' + command.kind + ' id=' + command.id + ' timeout=' + timeoutMs + 'ms');
         commandTimer = setTimeout(function () {
           if (pendingId !== command.id) return;
+          addDiagnostic('COMMAND TIMEOUT', 'kind=' + command.kind + ' id=' + command.id, true);
           pendingId = null;
           commandBusy = false;
           probeInFlight = false;
@@ -551,8 +564,22 @@
           processCommandQueue();
           return;
         }
-        if (command.kind === 'binary') iframe.contentWindow.postMessage(command.payload, '*');
-        else iframe.contentWindow.postMessage(command.script, '*');
+        try {
+          if (command.kind === 'binary') {
+            iframe.contentWindow.postMessage(command.payload, '*');
+          } else {
+            iframe.contentWindow.postMessage(command.script, '*');
+          }
+          addDiagnostic('POSTMESSAGE OK', 'kind=' + command.kind + ' id=' + command.id + ' target=' + iframe.src.split('#')[0]);
+        } catch (err) {
+          addDiagnostic('POSTMESSAGE ERROR', err && err.message ? err.message : String(err), true);
+          if (commandTimer) clearTimeout(commandTimer);
+          commandTimer = null;
+          pendingId = null;
+          commandBusy = false;
+          sendToWS({ type: 'result', id: command.id, success: false, error: 'Could not post message to Photopea: ' + (err && err.message ? err.message : String(err)) });
+          processCommandQueue();
+        }
       }
 
       function sendToPhotopea(payload) {
@@ -605,6 +632,9 @@
         // Only accept messages from the Photopea iframe
         if (!iframe || (iframe.contentWindow && event.source !== iframe.contentWindow)) return;
         var data = event.data;
+        var messageType = data === 'done' ? 'done' : (data instanceof ArrayBuffer ? 'ArrayBuffer(' + data.byteLength + ')' : typeof data);
+        var messagePreview = typeof data === 'string' ? data.slice(0, 160) : messageType;
+        addDiagnostic('PP MESSAGE', 'origin=' + event.origin + ' type=' + messageType + ' pending=' + (pendingId || 'none') + ' data=' + messagePreview);
 
         // Only Photopea's documented "done" handshake proves readiness.
         // Other messages must never mark the editor ready.
@@ -628,6 +658,7 @@
       });
 
       function handlePhotopea_done() {
+        addDiagnostic('PP DONE', 'photopeaReady=' + photopeaReady + ' pending=' + (pendingId || 'none'));
         if (!photopeaReady) {
           // First "done" = Photopea has finished loading
           photopeaReady = true;
@@ -660,9 +691,11 @@
             return typeof value === 'string' && value.trim() === expected;
           });
           if (probeConfirmed) {
+            addDiagnostic('HEARTBEAT OK', 'Photopea echoed the current probe nonce');
             statusText.textContent = 'Connected — Photopea ready';
             sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
           } else {
+            addDiagnostic('HEARTBEAT MISS', 'Photopea completed probe but did not echo expected nonce', true);
             // Do not latch into a permanent not-ready state: the periodic probe retries.
             sendToWS({ type: 'status', status: 'waiting' });
             statusText.textContent = 'Connected — retrying Photopea probe';
@@ -671,6 +704,7 @@
           if (previewMaxSize > 0) downscalePng(fileBuffer, previewMaxSize).then(function (buf) { sendFile(id, buf); });
           else sendFile(id, fileBuffer);
         } else {
+          addDiagnostic('COMMAND DONE', 'id=' + id + ' echoCount=' + echoBuffer.length + ' hasFile=' + (fileBuffer !== null));
           // Detect script errors from Photopea's echoed result.
           var hasError = resultData !== null && /^(ReferenceError|TypeError|SyntaxError|Error|RangeError):/.test(resultData);
           sendToWS({
@@ -725,6 +759,7 @@
         echoBuffer = [];
         fileBuffer = null;
         if (wsReady) sendToWS({ type: 'status', status: 'waiting' });
+        addDiagnostic('PP IFRAME LOAD', 'iframe reloaded; readiness reset');
         statusText.textContent = wsReady ? 'Connected — waiting for Photopea' : 'Disconnected';
       });
 
