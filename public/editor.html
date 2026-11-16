@@ -509,7 +509,7 @@
       // Execute: forward script to Photopea, collect results, send back
       // -----------------------------------------------------------------------
       function handleExecute(msg) {
-        commandQueue.push({ kind: 'script', id: msg.id, script: msg.script, previewMaxSize: msg.previewMaxSize || 0 });
+        commandQueue.push({ kind: 'script', id: msg.id, script: msg.script, previewMaxSize: msg.previewMaxSize || 0, timeoutMs: msg.timeoutMs || 65000 });
         processCommandQueue();
       }
 
