@@ -135,6 +135,15 @@ export class PhotopeaBridge {
   private socket?: WebSocket;
   private pending = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   constructor(state: DurableObjectState) { this.state = state; }
+  private getActiveSocket(): WebSocket | undefined {
+    if (this.socket?.readyState === WebSocket.OPEN) return this.socket;
+    return this.state.getWebSockets().find(socket => socket.readyState === WebSocket.OPEN);
+  }
+  private async isReady(): Promise<boolean> {
+    const ready = !!(await this.state.storage.get<boolean>("ready"));
+    const lastHeartbeatAt = Number(await this.state.storage.get<number>("lastHeartbeatAt") || 0);
+    return ready && lastHeartbeatAt > 0 && Date.now() - lastHeartbeatAt < 45000;
+  }
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/ws") {
@@ -146,13 +155,18 @@ export class PhotopeaBridge {
       this.state.acceptWebSocket(server);
       this.socket = server;
       await this.state.storage.put("ready", false);
+      await this.state.storage.put("lastHeartbeatAt", 0);
       return new Response(null, { status: 101, webSocket: client });
     }
-    const active = this.socket || this.state.getWebSockets()[0];
-    if (url.pathname === "/status") return json({ connected: !!active && active.readyState === WebSocket.OPEN, ready: !!(await this.state.storage.get<boolean>("ready")) });
+    const active = this.getActiveSocket();
+    if (url.pathname === "/status") {
+      const connected = !!active;
+      const ready = connected && await this.isReady();
+      return json({ connected, ready, lastHeartbeatAt: await this.state.storage.get<number>("lastHeartbeatAt") || 0 });
+    }
     if (url.pathname === "/load" && request.method === "POST") {
       const active = this.socket || this.state.getWebSockets()[0];
-      if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not connected and ready." }, 503);
+      if (!active || !(await this.isReady())) return json({ ok: false, error: "Photopea is not responsive. Bring the /editor tab to the foreground and wait for 'Connected — Photopea ready'." }, 503);
       const bytes = new Uint8Array(await request.arrayBuffer());
       const filename = request.headers.get("x-photopea-filename") || "photopea-file";
       if (!bytes.byteLength || bytes.byteLength > 25 * 1024 * 1024) return json({ ok: false, error: "File must be between 1 byte and 25 MB." }, 413);
@@ -170,7 +184,7 @@ export class PhotopeaBridge {
       return json({ ok: true, result: outcome });
     }
     if (url.pathname === "/execute" && request.method === "POST") {
-      if (!active || active.readyState !== WebSocket.OPEN || !(await this.state.storage.get<boolean>("ready"))) return json({ ok: false, error: "Photopea is not ready. Open /editor in a browser and keep that tab open until it shows 'Connected — Photopea ready'. No token is required." }, 503);
+      if (!active || !(await this.isReady())) return json({ ok: false, error: "Photopea is not responsive. Bring the /editor tab to the foreground and wait for 'Connected — Photopea ready'." }, 503);
       const body = await request.json() as { script: string; expectFiles?: boolean; previewMaxSize?: number };
       if (typeof body.script !== "string" || !body.script.trim() || body.script.length > 200000) return json({ ok: false, error: "Script must contain 1–200,000 characters." }, 400);
       const id = crypto.randomUUID();
@@ -201,6 +215,13 @@ export class PhotopeaBridge {
       const data = JSON.parse(message) as { type: string; id?: string; success?: boolean; data?: string | null; error?: string | null; status?: string };
       if (data.type === "status") {
         await this.state.storage.put("ready", data.status === "ready");
+        if (data.status !== "ready") await this.state.storage.put("lastHeartbeatAt", 0);
+        return;
+      }
+      if (data.type === "heartbeat") {
+        const ready = data.status === "ready";
+        await this.state.storage.put("lastHeartbeatAt", Date.now());
+        await this.state.storage.put("ready", ready);
         return;
       }
       if (data.type === "result" && data.id) {
@@ -214,6 +235,7 @@ export class PhotopeaBridge {
   async webSocketClose(socket: WebSocket) {
     if (this.socket === socket) this.socket = undefined;
     await this.state.storage.put("ready", false);
+    await this.state.storage.put("lastHeartbeatAt", 0);
   }
   webSocketError(socket: WebSocket) { return this.webSocketClose(socket); }
 }
