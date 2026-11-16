@@ -328,7 +328,7 @@
         wsReady = connected;
         if (connected) {
           dot.classList.add('connected');
-          statusText.textContent = photopeaReady ? 'Connected — Photopea ready' : 'Connected — waiting for Photopea';
+          statusText.textContent = photopeaReady ? 'Connected — checking Photopea' : 'Connected — waiting for Photopea';
         } else {
           dot.classList.remove('connected');
           statusText.textContent = 'Disconnected';
@@ -338,7 +338,7 @@
       function setPhotopeaReady() {
         photopeaReady = true;
         if (wsReady) {
-          statusText.textContent = 'Connected — Photopea ready';
+          statusText.textContent = 'Connected — checking Photopea';
         }
       }
 
@@ -649,6 +649,7 @@
           var expected = 'MCP_PONG:' + id.substring(6);
           probeInFlight = false;
           if (resultData === expected) {
+            statusText.textContent = 'Connected — Photopea ready';
             sendToWS({ type: 'heartbeat', status: 'ready', at: Date.now() });
           } else {
             photopeaReady = false;
