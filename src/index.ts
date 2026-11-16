@@ -233,9 +233,16 @@ export class PhotopeaBridge {
     } catch { /* Ignore malformed bridge messages. */ }
   }
   async webSocketClose(socket: WebSocket) {
-    if (this.socket === socket) this.socket = undefined;
+    // Ignore close events from an old tab after a newer editor has taken over.
+    if (this.socket !== socket) return;
+    this.socket = undefined;
     await this.state.storage.put("ready", false);
     await this.state.storage.put("lastHeartbeatAt", 0);
+    for (const [id, item] of this.pending.entries()) {
+      clearTimeout(item.timer);
+      item.reject(new Error("Photopea editor WebSocket disconnected while the command was running."));
+      this.pending.delete(id);
+    }
   }
   webSocketError(socket: WebSocket) { return this.webSocketClose(socket); }
 }
